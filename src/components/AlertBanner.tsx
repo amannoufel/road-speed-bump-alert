@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { X, AlertTriangle, Navigation2 } from 'lucide-react';
+import { X, Navigation2 } from 'lucide-react';
 import type { SpeedHump } from '@/lib/supabase';
 
 type DistMap = globalThis.Map<string, number>;
@@ -13,9 +13,9 @@ interface AlertBannerProps {
 }
 
 const SEV_CONFIG = {
-  mild:     { gradient: 'from-green-700 to-emerald-700', badge: 'bg-green-500/25 text-green-300', icon: '🟢' },
-  moderate: { gradient: 'from-amber-600 to-orange-600',  badge: 'bg-amber-500/25 text-amber-300',  icon: '🟡' },
-  severe:   { gradient: 'from-red-700 to-rose-700',      badge: 'bg-red-500/25 text-red-300',      icon: '🔴' },
+  mild:     { gradient: 'from-green-700 to-emerald-700',  badge: 'bg-green-500/30 text-green-200',  ring: 'ring-green-400/40',  icon: '🟢', pulse: 'shadow-green-500/50'  },
+  moderate: { gradient: 'from-amber-600 to-orange-600',   badge: 'bg-amber-500/30 text-amber-200',  ring: 'ring-amber-400/40',  icon: '🟡', pulse: 'shadow-amber-500/60'  },
+  severe:   { gradient: 'from-red-700 to-rose-700',       badge: 'bg-red-500/30 text-red-200',      ring: 'ring-red-400/40',    icon: '🔴', pulse: 'shadow-red-500/60'    },
 };
 
 function playBeep(severity: SpeedHump['severity']) {
@@ -32,7 +32,6 @@ function playBeep(severity: SpeedHump['severity']) {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.35);
-    // Second beep for severe
     if (severity === 'severe') {
       setTimeout(() => {
         const o2 = ctx.createOscillator();
@@ -51,7 +50,6 @@ export default function AlertBanner({ humps, distances, onDismiss }: AlertBanner
   const prevCountRef = useRef(0);
   const [visible, setVisible] = useState(true);
 
-  // Play sound on new alerts
   useEffect(() => {
     if (humps.length > prevCountRef.current && humps.length > 0) {
       playBeep(humps[0].severity);
@@ -60,7 +58,6 @@ export default function AlertBanner({ humps, distances, onDismiss }: AlertBanner
     prevCountRef.current = humps.length;
   }, [humps]);
 
-  // Re-show banner when new humps appear
   useEffect(() => {
     if (humps.length > 0) setVisible(true);
   }, [humps.length]);
@@ -72,38 +69,37 @@ export default function AlertBanner({ humps, distances, onDismiss }: AlertBanner
   const dist = distances.get(nearest.id);
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[10000] pointer-events-none">
-      <div className={`pointer-events-auto mx-3 mt-3 md:mx-4 md:mt-4 rounded-2xl bg-gradient-to-r ${cfg.gradient} shadow-2xl border border-white/15 overflow-hidden`}>
-        {/* Animated stripe */}
-        <div className="h-0.5 bg-white/20 overflow-hidden">
-          <div className="h-full w-1/3 bg-white/50 animate-[slide_2s_linear_infinite]" />
+    <div className="fixed top-0 left-0 right-0 z-[10000] pointer-events-none" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <div className={`pointer-events-auto mx-3 mt-16 rounded-3xl bg-gradient-to-r ${cfg.gradient} shadow-2xl ${cfg.pulse} border border-white/20 overflow-hidden ring-2 ${cfg.ring}`}>
+
+        {/* Moving stripe */}
+        <div className="h-1 bg-white/20 overflow-hidden">
+          <div className="h-full w-1/3 bg-white/60 animate-[slide_1.5s_linear_infinite]" />
         </div>
 
-        <div className="flex items-center gap-3 p-3.5">
-          {/* Bouncing icon */}
-          <div className="w-12 h-12 rounded-2xl bg-black/20 flex items-center justify-center flex-shrink-0 border border-white/10">
-            <span className="text-2xl animate-bounce">🚧</span>
+        {/* Main row */}
+        <div className="flex items-center gap-3 px-4 py-4">
+          {/* Icon */}
+          <div className="w-14 h-14 rounded-2xl bg-black/25 flex items-center justify-center flex-shrink-0 border border-white/15 shadow-inner">
+            <span className="text-3xl animate-bounce">🚧</span>
           </div>
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <AlertTriangle size={11} className="text-white/70 flex-shrink-0" />
-              <span className="text-white/70 text-xs font-semibold uppercase tracking-widest">Speed Hump Ahead</span>
-            </div>
-            <p className="text-white font-bold text-base leading-tight truncate">{nearest.label}</p>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${cfg.badge}`}>
+            <p className="text-white/70 text-xs font-bold uppercase tracking-widest mb-1">⚠ Speed Hump Ahead</p>
+            <p className="text-white font-black text-lg leading-tight truncate">{nearest.label}</p>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${cfg.badge}`}>
                 {cfg.icon} {nearest.severity}
               </span>
               {dist !== undefined && (
-                <span className="flex items-center gap-1 text-white/70 text-xs font-medium">
-                  <Navigation2 size={10} />
-                  {dist < 1000 ? `${Math.round(dist)}m away` : `${(dist / 1000).toFixed(1)}km`}
+                <span className="flex items-center gap-1 text-white/80 text-sm font-bold">
+                  <Navigation2 size={12} />
+                  {dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`}
                 </span>
               )}
               {humps.length > 1 && (
-                <span className="text-white/50 text-xs">+{humps.length - 1} more</span>
+                <span className="text-white/50 text-xs">+{humps.length - 1} more nearby</span>
               )}
             </div>
           </div>
@@ -111,24 +107,27 @@ export default function AlertBanner({ humps, distances, onDismiss }: AlertBanner
           {/* Dismiss */}
           <button
             onClick={() => { onDismiss(nearest.id); setVisible(humps.length > 1); }}
-            className="w-8 h-8 rounded-full bg-black/25 hover:bg-black/40 flex items-center justify-center text-white/80 transition-colors flex-shrink-0"
+            className="w-10 h-10 rounded-full bg-black/30 active:bg-black/50 flex items-center justify-center text-white/80 flex-shrink-0 transition-colors"
           >
-            <X size={14} />
+            <X size={18} />
           </button>
         </div>
 
-        {/* Extra humps row */}
+        {/* More humps row */}
         {humps.length > 1 && (
-          <div className="flex gap-2 px-3.5 pb-3">
-            {humps.slice(1, 4).map((h) => (
-              <div key={h.id} className="flex-1 bg-black/20 rounded-xl px-3 py-2 flex items-center gap-2 border border-white/5 min-w-0">
-                <span className="text-sm flex-shrink-0">🚧</span>
-                <div className="min-w-0">
-                  <p className="text-white/90 text-xs font-semibold truncate">{h.label}</p>
-                  <p className="text-white/40 text-xs">{Math.round(distances.get(h.id) ?? 0)}m</p>
+          <div className="flex gap-2 px-4 pb-4 pt-0 overflow-x-auto">
+            {humps.slice(1, 4).map((h) => {
+              const hcfg = SEV_CONFIG[h.severity];
+              return (
+                <div key={h.id} className="flex-shrink-0 bg-black/25 rounded-2xl px-3 py-2.5 flex items-center gap-2 border border-white/10 min-w-[130px]">
+                  <span className="text-base flex-shrink-0">{hcfg.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-white/90 text-xs font-bold truncate">{h.label}</p>
+                    <p className="text-white/45 text-xs">{Math.round(distances.get(h.id) ?? 0)}m</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

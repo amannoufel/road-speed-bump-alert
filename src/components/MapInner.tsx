@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import {
   MapContainer, TileLayer, Marker, Popup, Circle,
-  useMapEvents, useMap,
+  useMapEvents, useMap, ZoomControl,
 } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -29,33 +29,33 @@ const SEVERITY_COLORS: Record<string, string> = {
 function createHumpIcon(severity: string, alerted: boolean) {
   const color = SEVERITY_COLORS[severity] ?? SEVERITY_COLORS.moderate;
   const glow = alerted
-    ? `box-shadow: 0 0 0 5px ${color}55, 0 0 0 10px ${color}22, 0 4px 16px rgba(0,0,0,0.5);`
-    : 'box-shadow: 0 3px 10px rgba(0,0,0,0.45);';
+    ? `box-shadow: 0 0 0 6px ${color}55, 0 0 0 12px ${color}22, 0 4px 16px rgba(0,0,0,0.5);`
+    : 'box-shadow: 0 3px 12px rgba(0,0,0,0.5);';
 
   return L.divIcon({
     className: '',
     html: `
       <div style="
         position: relative;
-        width: 38px; height: 38px;
+        width: 44px; height: 44px;
       ">
         <div style="
-          width: 38px; height: 38px; border-radius: 50% 50% 50% 0;
-          background: ${color}; border: 2.5px solid rgba(255,255,255,0.9);
+          width: 44px; height: 44px; border-radius: 50% 50% 50% 0;
+          background: ${color}; border: 3px solid rgba(255,255,255,0.95);
           transform: rotate(-45deg);
           ${glow}
           ${alerted ? 'animation: hump-pulse 1.2s ease-in-out infinite;' : ''}
         "></div>
         <span style="
-          position: absolute; top: 48%; left: 48%;
+          position: absolute; top: 47%; left: 48%;
           transform: translate(-50%, -50%) rotate(45deg);
-          font-size: 17px; line-height: 1; user-select: none;
+          font-size: 20px; line-height: 1; user-select: none;
         ">🚧</span>
       </div>
     `,
-    iconSize: [38, 38],
-    iconAnchor: [19, 38],
-    popupAnchor: [0, -42],
+    iconSize: [44, 44],
+    iconAnchor: [22, 44],
+    popupAnchor: [0, -48],
   });
 }
 
@@ -214,8 +214,10 @@ export default function MapInner({
         center={center}
         zoom={16}
         style={{ width: '100%', height: '100%' }}
-        zoomControl={true}
+        zoomControl={false}
       >
+        {/* Zoom control at bottom-right for one-handed mobile reach */}
+        <ZoomControl position="bottomright" />
         {/* Dark map tiles from CartoDB */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
