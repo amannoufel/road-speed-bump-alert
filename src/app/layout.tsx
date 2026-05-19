@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     type: "website",
   },
 };
-//test
+//tes
 export const viewport = {
   width: "device-width",
   initialScale: 1,
