@@ -211,7 +211,7 @@ export default function HomePage() {
         <AlertBanner humps={activeHumpAlerts} distances={distances} onDismiss={handleDismissAlert} />
 
         {/* ── MOBILE HEADER ── */}
-        <header className="flex items-center justify-between px-4 py-3 bg-[#111127]/95 backdrop-blur-md border-b border-white/5 z-10 flex-shrink-0" style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
+        <header className="flex items-center justify-between px-4 py-3 bg-[#111127]/95 backdrop-blur-md border-b border-white/5 relative z-[2000] flex-shrink-0" style={{ paddingTop: 'max(12px, env(safe-area-inset-top))' }}>
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-lg shadow-lg shadow-amber-500/25">
               🚧
@@ -359,7 +359,7 @@ export default function HomePage() {
 
         {/* ── BOTTOM NAV ── */}
         <nav
-          className="flex items-end border-t border-white/5 bg-[#0d0d18]/95 backdrop-blur-md flex-shrink-0 relative z-10"
+          className="flex items-end border-t border-white/5 bg-[#0d0d18]/95 backdrop-blur-md flex-shrink-0 relative z-[2000]"
           style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}
         >
           {/* Map tab */}
