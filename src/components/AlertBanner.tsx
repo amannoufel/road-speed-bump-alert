@@ -18,32 +18,98 @@ const SEV_CONFIG = {
   severe:   { gradient: 'from-red-700 to-rose-700',       badge: 'bg-red-500/30 text-red-200',      ring: 'ring-red-400/40',    icon: '🔴', pulse: 'shadow-red-500/60'    },
 };
 
+let sharedAudioCtx: AudioContext | null = null;
+
+function initAudio() {
+  if (typeof window === 'undefined') return null;
+  if (!sharedAudioCtx) {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedAudioCtx = new Ctx();
+  }
+  if (sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
+}
+
+// Unlock audio context on first user interaction (browser policy)
+if (typeof window !== 'undefined') {
+  const unlock = () => {
+    initAudio();
+    document.removeEventListener('touchstart', unlock);
+    document.removeEventListener('click', unlock);
+  };
+  document.addEventListener('touchstart', unlock);
+  document.addEventListener('click', unlock);
+}
+
 function playBeep(severity: SpeedHump['severity']) {
   try {
-    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const ctx = initAudio();
+    if (!ctx) return;
+    
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    
+    // Square wave makes a more urgent, buzz-like alert sound
+    osc.type = 'square';
     osc.connect(gain);
     gain.connect(ctx.destination);
-    const freq = severity === 'severe' ? 1200 : severity === 'moderate' ? 880 : 660;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + 0.18);
-    gain.gain.setValueAtTime(0.35, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.35);
+    
+    const now = ctx.currentTime;
+    const freq = severity === 'severe' ? 700 : severity === 'moderate' ? 550 : 450;
+    const vol = severity === 'severe' ? 0.8 : 0.65; // Much louder alerts (up from 0.4 and 0.25)
+    
     if (severity === 'severe') {
-      setTimeout(() => {
-        const o2 = ctx.createOscillator();
-        const g2 = ctx.createGain();
-        o2.connect(g2); g2.connect(ctx.destination);
-        o2.frequency.value = 1000;
-        g2.gain.setValueAtTime(0.3, ctx.currentTime);
-        g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-        o2.start(ctx.currentTime); o2.stop(ctx.currentTime + 0.25);
-      }, 250);
+      // 3 urgent, longer beeps for severe
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0, now);
+      
+      // Beep 1 (now to now + 0.25)
+      gain.gain.linearRampToValueAtTime(vol, now + 0.05);
+      gain.gain.linearRampToValueAtTime(0, now + 0.25);
+      
+      // Beep 2 (now + 0.35 to now + 0.60)
+      gain.gain.setValueAtTime(0, now + 0.35); // Anchor start of Beep 2
+      gain.gain.linearRampToValueAtTime(vol, now + 0.40);
+      gain.gain.linearRampToValueAtTime(0, now + 0.60);
+      
+      // Beep 3 (now + 0.70 to now + 1.05) - higher pitched
+      osc.frequency.setValueAtTime(freq * 1.5, now + 0.70);
+      gain.gain.setValueAtTime(0, now + 0.70); // Anchor start of Beep 3
+      gain.gain.linearRampToValueAtTime(vol, now + 0.75);
+      gain.gain.linearRampToValueAtTime(0, now + 1.05);
+      
+      osc.start(now);
+      osc.stop(now + 1.1); // Total 1.1s duration (up from 0.8s)
+      
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([300, 100, 300, 100, 500]); // Stronger vibration
+      }
+    } else {
+      // 2 standard, longer beeps
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0, now);
+      
+      // Beep 1 (now to now + 0.25)
+      gain.gain.linearRampToValueAtTime(vol, now + 0.05);
+      gain.gain.linearRampToValueAtTime(0, now + 0.25);
+      
+      // Beep 2 (now + 0.35 to now + 0.60)
+      gain.gain.setValueAtTime(0, now + 0.35); // Anchor start of Beep 2
+      gain.gain.linearRampToValueAtTime(vol, now + 0.40);
+      gain.gain.linearRampToValueAtTime(0, now + 0.60);
+      
+      osc.start(now);
+      osc.stop(now + 0.7); // Total 0.7s duration (up from 0.5s)
+      
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+      }
     }
-  } catch { /* audio blocked */ }
+  } catch (err) {
+    console.error('Audio play failed:', err);
+  }
 }
 
 export default function AlertBanner({ humps, distances, onDismiss }: AlertBannerProps) {

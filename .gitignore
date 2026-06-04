@@ -42,3 +42,11 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Portable JDK and build artifacts
+/jdk.zip
+/jdk21.zip
+/jdk_temp/
+/jdk21_temp/
+/*.apk
+/_

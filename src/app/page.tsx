@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SpeedHump } from '@/lib/supabase';
+import { supabase, type SpeedHump } from '@/lib/supabase';
 import { haversineDistance } from '@/lib/geoUtils';
 import MapView from '@/components/MapView';
 import AddHumpModal from '@/components/AddHumpModal';
@@ -41,6 +41,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [alertRadius, setAlertRadius] = useState(DEFAULT_ALERT_RADIUS);
+  const [quickAddMode, setQuickAddMode] = useState(false); // Quick Add state
   const [showSettings, setShowSettings] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastMsg[]>([]);
@@ -48,6 +49,7 @@ export default function HomePage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const watchIdRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<any>(null); // Screen Wake Lock ref
   const toastCountRef = useRef(0);
 
   const addToast = useCallback((text: string, type: ToastMsg['type'] = 'info') => {
@@ -59,12 +61,21 @@ export default function HomePage() {
   // ── Fetch all humps ──────────────────────────────────────────────────────
   const fetchHumps = useCallback(async () => {
     try {
-      const res = await fetch('/api/humps');
-      if (!res.ok) throw new Error('fetch failed');
-      const json = await res.json();
-      if (json.data) setHumps(json.data);
+      if (!supabase) {
+        setIsOnline(false);
+        setIsLoading(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('speed_humps')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if (data) setHumps(data);
       setIsOnline(true);
-    } catch {
+    } catch (err) {
+      console.error('Fetch humps error:', err);
       setIsOnline(false);
     } finally {
       setIsLoading(false);
@@ -90,6 +101,76 @@ export default function HomePage() {
     return () => {
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
+  }, []);
+
+  // ── Screen Wake Lock API (keeps screen awake while app is active) ───────
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('wakeLock' in navigator)) return;
+    
+    async function requestWakeLock() {
+      try {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+      } catch (err) {
+        console.warn('Wake Lock request failed:', err);
+      }
+    }
+    
+    requestWakeLock();
+    
+    // Re-request wake lock when app becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !wakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().then(() => {
+          wakeLockRef.current = null;
+        });
+      }
+    };
+  }, []);
+
+  // ── Load settings from localStorage ──────────────────────────────────────
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedRadius = localStorage.getItem('hump_alert_radius');
+        if (savedRadius) setAlertRadius(Number(savedRadius));
+        
+        const savedQuickAdd = localStorage.getItem('hump_quick_add_mode');
+        if (savedQuickAdd) setQuickAddMode(savedQuickAdd === 'true');
+      } catch (err) {
+        console.warn('LocalStorage read is blocked in this sandboxed environment:', err);
+      }
+    }
+  }, []);
+
+  const handleRadiusChange = useCallback((radius: number) => {
+    setAlertRadius(radius);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('hump_alert_radius', String(radius));
+      } catch (err) {
+        console.warn('LocalStorage write (radius) is blocked:', err);
+      }
+    }
+  }, []);
+
+  const handleQuickAddModeChange = useCallback((enabled: boolean) => {
+    setQuickAddMode(enabled);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('hump_quick_add_mode', String(enabled));
+      } catch (err) {
+        console.warn('LocalStorage write (quick add) is blocked:', err);
+      }
+    }
   }, []);
 
   // ── Proximity check ──────────────────────────────────────────────────────
@@ -133,16 +214,55 @@ export default function HomePage() {
     setActiveHumpAlerts(active);
   }, [userLocation, humps, alertRadius, dismissedHumps]);
 
+  // ── Instant Hump Mark (Direct Save) ──────────────────────────────────────
+  const handleConfirmHumpDirect = useCallback(async (lat: number, lng: number) => {
+    setIsSaving(true);
+    try {
+      const { data: inserted, error } = await supabase
+        .from('speed_humps')
+        .insert([{
+          lat,
+          lng,
+          label: 'Speed Hump',
+          severity: 'moderate',
+          notes: '',
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (inserted) {
+        setHumps((prev) => [inserted, ...prev]);
+        addToast('🚧 Hump saved instantly!', 'success');
+        setIsOnline(true);
+      }
+    } catch (err: any) {
+      console.error('Instant save hump error:', err);
+      setIsOnline(false);
+      addToast(err?.message || 'Failed to save', 'error');
+    }
+    setIsSaving(false);
+  }, [addToast]);
+
   // ── Map click handler ────────────────────────────────────────────────────
   const handleMapClick = useCallback((lat: number, lng: number) => {
-    if (isRecording) setPendingHump({ lat, lng });
-  }, [isRecording]);
+    if (!isRecording) return;
+    if (quickAddMode) {
+      handleConfirmHumpDirect(lat, lng);
+    } else {
+      setPendingHump({ lat, lng });
+    }
+  }, [isRecording, quickAddMode, handleConfirmHumpDirect]);
 
   // ── Quick-add at current position ────────────────────────────────────────
   const handleAddAtCurrentLocation = useCallback(() => {
     if (!userLocation) { addToast('GPS not available yet', 'error'); return; }
-    setPendingHump({ lat: userLocation.lat, lng: userLocation.lng });
-  }, [userLocation, addToast]);
+    if (quickAddMode) {
+      handleConfirmHumpDirect(userLocation.lat, userLocation.lng);
+    } else {
+      setPendingHump({ lat: userLocation.lat, lng: userLocation.lng });
+    }
+  }, [userLocation, quickAddMode, addToast, handleConfirmHumpDirect]);
 
   // ── Save hump ────────────────────────────────────────────────────────────
   const handleConfirmHump = async (data: {
@@ -153,22 +273,29 @@ export default function HomePage() {
     if (!pendingHump) return;
     setIsSaving(true);
     try {
-      const res = await fetch('/api/humps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...pendingHump, ...data }),
-      });
-      const json = await res.json();
-      if (json.data) {
-        setHumps((prev) => [json.data, ...prev]);
+      const sev = ['mild', 'moderate', 'severe'].includes(data.severity) ? data.severity : 'moderate';
+      const { data: inserted, error } = await supabase
+        .from('speed_humps')
+        .insert([{
+          lat: pendingHump.lat,
+          lng: pendingHump.lng,
+          label: (data.label || 'Speed Hump').slice(0, 100),
+          severity: sev,
+          notes: (data.notes || '').slice(0, 500),
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (inserted) {
+        setHumps((prev) => [inserted, ...prev]);
         addToast('🚧 Speed hump saved!', 'success');
         setIsOnline(true);
-      } else {
-        addToast(json.error ?? 'Failed to save', 'error');
       }
-    } catch {
+    } catch (err: any) {
+      console.error('Save hump error:', err);
       setIsOnline(false);
-      addToast('No internet — could not save', 'error');
+      addToast(err?.message || 'Failed to save', 'error');
     }
     setIsSaving(false);
     setPendingHump(null);
@@ -180,10 +307,11 @@ export default function HomePage() {
     setAlertedHumps((prev) => { const n = new Set(prev); n.delete(id); return n; });
     setDismissedHumps((prev) => { const n = new Set(prev); n.delete(id); return n; });
     try {
-      const res = await fetch(`/api/humps?id=${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error();
+      const { error } = await supabase.from('speed_humps').delete().eq('id', id);
+      if (error) throw error;
       addToast('Hump deleted', 'info');
-    } catch {
+    } catch (err) {
+      console.error('Delete hump error:', err);
       fetchHumps();
       addToast('Delete failed — refreshed data', 'error');
     }
@@ -420,10 +548,12 @@ export default function HomePage() {
       {showSettings && (
         <SettingsSheet
           alertRadius={alertRadius}
-          onRadiusChange={setAlertRadius}
+          onRadiusChange={handleRadiusChange}
           onClose={() => setShowSettings(false)}
           humpCount={humps.length}
           isOnline={isOnline}
+          quickAddMode={quickAddMode}
+          onQuickAddModeChange={handleQuickAddModeChange}
         />
       )}
 

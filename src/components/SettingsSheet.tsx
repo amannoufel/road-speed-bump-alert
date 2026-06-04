@@ -9,6 +9,8 @@ interface SettingsSheetProps {
   onClose: () => void;
   humpCount: number;
   isOnline: boolean;
+  quickAddMode: boolean;
+  onQuickAddModeChange: (v: boolean) => void;
 }
 
 export default function SettingsSheet({
@@ -17,6 +19,8 @@ export default function SettingsSheet({
   onClose,
   humpCount,
   isOnline,
+  quickAddMode,
+  onQuickAddModeChange,
 }: SettingsSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -114,6 +118,28 @@ export default function SettingsSheet({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Quick Add Mode Toggle */}
+          <div className="flex items-center justify-between bg-white/5 rounded-2xl p-4 border border-white/5">
+            <div className="flex-1 min-w-0 pr-4">
+              <span className="text-white font-bold text-sm">Quick Add Mode</span>
+              <p className="text-white/30 text-xs mt-0.5">
+                Mark humps instantly using default values, completely bypassing details popups.
+              </p>
+            </div>
+            <button
+              onClick={() => onQuickAddModeChange(!quickAddMode)}
+              className={`w-14 h-8 rounded-full p-1 transition-colors duration-200 focus:outline-none flex-shrink-0 ${
+                quickAddMode ? 'bg-amber-500' : 'bg-white/10'
+              }`}
+            >
+              <div
+                className={`w-6 h-6 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                  quickAddMode ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </button>
           </div>
 
           {/* Info cards */}
